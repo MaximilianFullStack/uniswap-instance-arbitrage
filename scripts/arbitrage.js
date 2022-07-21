@@ -3,20 +3,24 @@ const { sushiSpotPrice } = require("../scripts/sushiSpotPrice")
 const { shibaSpotPrice } = require("../scripts/shibaSpotPrice")
 const { sakeSpotPrice } = require("../scripts/sakeSpotPrice")
 const { croSpotPrice } = require("../scripts/croSpotPrice")
-const { ethers } = require("hardhat")
+const { ethers, hre } = require("hardhat")
 const { getWETH, AMOUNT } = require("./getWETH")
 
-let arbAMT = ethers.utils.formatEther(AMOUNT)
-let loop = 0
+//user inputed varibles (arbitrage settings)
+const WETH_AMOUNT = ethers.utils.formatEther(AMOUNT)
+const TOTAL_LOOPS = 30
+const loopingEnabled = false
+
+//do not touch
+let loopIteration = 0
 let cycleProfit = 0
-let loopingEnabled = false
 const wethAddress = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
 const daiAddress = "0x6b175474e89094c44da98b954eedeac495271d0f"
 
 async function loopTracker() {
-    if (loop < 30) {
-        loop++
-        console.log(`Iteration: ${loop}.`)
+    if (loopIteration < TOTAL_LOOPS) {
+        loopIteration++
+        console.log(`Iteration: ${loopIteration}.`)
         setTimeout(() => {
             findArbitrage()
         }, 10000)
@@ -29,16 +33,17 @@ async function loopTracker() {
 
 async function getFunds() {
     const { deployer } = await getNamedAccounts()
+
     //get WETH
     await getWETH()
 
     // Get dai for arbitrage
-    await getDai(AMOUNT, arbAMT, wethAddress, daiAddress, deployer)
+    await getDai(AMOUNT, WETH_AMOUNT, wethAddress, daiAddress, deployer)
 }
 
 async function findArbitrage() {
     const { deployer } = await getNamedAccounts()
-    const provider = ethers.getDefaultProvider("homestead")
+    const provider = ethers.getDefaultProvider()
 
     //get external, "fair" price
     const oraclePriceUSD = await getOraclePrice()
@@ -110,8 +115,8 @@ async function findArbitrage() {
         (
             ethers.utils.formatEther(sellPrice.price) -
             ethers.utils.formatEther(buyPrice.price)
-        ).toString() * arbAMT
-    const ETHfee = 2 * arbAMT * 0.003
+        ).toString() * WETH_AMOUNT
+    const ETHfee = 2 * WETH_AMOUNT * 0.003
     const TOTAL_DEX_FEE = ETHfee * oraclePriceUSD
     const GAS_PRICE = ethers.utils.formatEther(await provider.getGasPrice())
     let gasFees = ("161000" * GAS_PRICE).toString() * "2"
@@ -135,7 +140,7 @@ async function findArbitrage() {
             deployer
         )
         cycleProfit += gross
-        await getFunds()
+        // await getFunds()
         if (loopingEnabled == true) {
             loopTracker()
         }
@@ -143,6 +148,7 @@ async function findArbitrage() {
         if (loopingEnabled == true) {
             loopTracker()
         } else {
+            console.log("Not preforming trade.")
             console.log(`Arbitrage made ${cycleProfit} DAI.`)
             process.exit(0)
         }
